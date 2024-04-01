@@ -1,1 +1,1 @@
-web: ./targe/release/correlation-engine
+web: ./target/release/correlation-engine

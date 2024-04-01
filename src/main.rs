@@ -33,6 +33,8 @@ struct RevenueParameters {
 
 #[tokio::main]
 async fn main() {
+    println!("Starting set up");
+
     let datasets = database::queries::fetch_datasets::fetch_datasets().unwrap();
     let dataset_metadatas = database::queries::fetch_datasets::fetch_dataset_metadata().unwrap();
 
@@ -163,6 +165,7 @@ async fn main() {
         .parse()
         .expect("PORT must be a number");
 
+    println!("Starting web server! on {}", port);
     warp::serve(revenue_route.or(correlate_route))
         .run(([127, 0, 0, 1], port))
         .await;
