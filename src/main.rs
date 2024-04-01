@@ -20,6 +20,7 @@ use rayon::ThreadPoolBuilder;
 use serde::Deserialize;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 use warp::Filter;
 
@@ -157,7 +158,12 @@ async fn main() {
         });
 
     // Start the webserver
+    let port: u16 = env::var("PORT")
+        .unwrap_or_else(|_| "8001".to_string())
+        .parse()
+        .expect("PORT must be a number");
+
     warp::serve(revenue_route.or(correlate_route))
-        .run(([127, 0, 0, 1], 8001))
+        .run(([127, 0, 0, 1], port))
         .await;
 }
