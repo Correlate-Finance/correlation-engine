@@ -1,0 +1,20 @@
+[package]
+name = "correlation-engine"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dotenv = "0.15"
+serde = { version = "1.0.197", features = ["derive"] }
+chrono = { version = "0.4.35", features = ["serde"] }
+diesel = { version = "2.1.5", features = ["postgres", "chrono"] }
+polars = {version = "0.38.3", features = ["lazy", "dtype-duration", "dtype-datetime","temporal","strings", "ndarray"]}
+ndarray = "0.15.6"
+ndarray-stats = "0.5.1"
+rayon = "1.10.0"
+warp = "0.3.6"
+tokio = { version = "1.36.0", features = ["full"] }
+serde_json = "1.0.115"
+reqwest = { version = "0.12.2", features = ["json"] }

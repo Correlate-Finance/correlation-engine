@@ -1,0 +1,1 @@
+web: ./targe/release/correlation-engine
