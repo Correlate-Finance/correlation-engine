@@ -22,6 +22,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
+use std::time::SystemTime;
 use warp::Filter;
 
 #[derive(Deserialize, Clone)]
@@ -35,28 +36,38 @@ struct RevenueParameters {
 async fn main() {
     println!("Starting set up");
 
+    let pool = ThreadPoolBuilder::new()
+        .stack_size(32 * 1024 * 1024) // 32 MB
+        .build()
+        .unwrap();
+
+    let now = SystemTime::now();
     let datasets = database::queries::fetch_datasets::fetch_datasets().unwrap();
     let dataset_metadatas = database::queries::fetch_datasets::fetch_dataset_metadata().unwrap();
 
     let dataframes = core_logic::data_processing::create_dataframes(&datasets, &dataset_metadatas);
     let dataset_metadatas_map: Arc<HashMap<String, DatasetMetadata>> = Arc::new(
         dataset_metadatas
-            .iter()
+            .par_iter()
             .map(|metadata| (metadata.internal_name.clone(), metadata.to_owned()))
             .collect(),
     );
 
-    let transformed_dataframes: Arc<HashMap<String, DataFrame>> = Arc::new(
-        dataframes
-            .into_iter()
+    println! {"Elapsed time fetching data {}", now.elapsed().unwrap().as_secs()}
+
+    let transformed_dataframes: Arc<HashMap<String, DataFrame>> = Arc::new(pool.install(|| {
+        let transformed_dataframes = dataframes
+            .par_iter()
             .map(|(name, df)| {
                 let transformed_df =
                     core_logic::data_processing::transform_data(df, AggregationPeriod::Quarterly);
-                println!("{} {:?}", name, transformed_df);
-                (name, transformed_df)
+                (name.clone(), transformed_df)
             })
-            .collect(),
-    );
+            .collect();
+        transformed_dataframes
+    }));
+
+    println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
 
     // let correlations_route = warp::path("correlations").map({
     //     let transformed_dataframes = Arc::clone(&transformed_dataframes);

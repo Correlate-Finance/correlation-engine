@@ -5,11 +5,12 @@ use std::collections::HashMap;
 
 use crate::database::models::{AggregationPeriod, Dataset, DatasetMetadata};
 
-pub fn transform_data(df: DataFrame, time_increment: AggregationPeriod) -> DataFrame {
+pub fn transform_data(df: &DataFrame, time_increment: AggregationPeriod) -> DataFrame {
     // Group by aggregation period
     let q_df = match time_increment {
         AggregationPeriod::Quarterly => {
             let q_df = df
+                .clone()
                 .lazy()
                 .with_column(
                     (col("Date").dt().year().cast(DataType::String)
@@ -29,7 +30,7 @@ pub fn transform_data(df: DataFrame, time_increment: AggregationPeriod) -> DataF
         AggregationPeriod::Annually => {
             // Implement Annually logic
             // ...
-            df
+            df.clone()
         }
     };
 
@@ -166,7 +167,7 @@ pub fn revenues_to_dataframe(revenues: HashMap<String, f64>) -> DataFrame {
     ])
     .unwrap();
 
-    transform_data(df, AggregationPeriod::Quarterly)
+    transform_data(&df, AggregationPeriod::Quarterly)
 }
 
 #[cfg(test)]
