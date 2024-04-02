@@ -1,5 +1,3 @@
-use crate::{core_logic::data_processing::correlate, database::models::AggregationPeriod};
-
 #[macro_use]
 extern crate diesel;
 
@@ -10,7 +8,10 @@ mod database;
 
 use adapters::discounting_cash_flows::fetch_stock_revenues;
 use adapters::discounting_cash_flows::InternalServerError;
+use api::lib::{correlation_metric_from_str, month_index};
+use api::models::AggregationPeriod;
 use api::models::{CorrelateDataPoint, CorrelationData};
+use core_logic::data_processing::correlate;
 use core_logic::data_processing::revenues_to_dataframe;
 use database::models::DatasetMetadata;
 
@@ -32,22 +33,22 @@ struct RevenueParameters {
     stock: String,
     start_year: i32,
     aggregation_period: String,
+    lag_periods: usize,
+    correlation_metric: String,
 }
 
 async fn pre_process_datasets() -> (
     Arc<HashMap<std::string::String, DatasetMetadata>>,
     Arc<HashMap<std::string::String, polars::prelude::DataFrame>>,
 ) {
-    let pool = ThreadPoolBuilder::new()
-        .stack_size(32 * 1024 * 1024) // 32 MB
-        .build()
-        .unwrap();
-
     let now = SystemTime::now();
     let datasets = database::queries::fetch_datasets::fetch_datasets().unwrap();
     let dataset_metadatas = database::queries::fetch_datasets::fetch_dataset_metadata().unwrap();
 
-    let dataframes = core_logic::data_processing::create_dataframes(&datasets, &dataset_metadatas);
+    let dataframes = Arc::new(core_logic::data_processing::create_dataframes(
+        &datasets,
+        &dataset_metadatas,
+    ));
     let dataset_metadatas_map: Arc<HashMap<String, DatasetMetadata>> = Arc::new(
         dataset_metadatas
             .par_iter()
@@ -56,22 +57,7 @@ async fn pre_process_datasets() -> (
     );
 
     println! {"Elapsed time fetching data {}", now.elapsed().unwrap().as_secs()}
-
-    let transformed_dataframes: Arc<HashMap<String, DataFrame>> = Arc::new(pool.install(|| {
-        let transformed_dataframes = dataframes
-            .par_iter()
-            .map(|(name, df)| {
-                let transformed_df =
-                    core_logic::data_processing::transform_data(df, AggregationPeriod::Quarterly);
-                (name.clone(), transformed_df)
-            })
-            .collect();
-        transformed_dataframes
-    }));
-
-    println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
-
-    (dataset_metadatas_map, transformed_dataframes)
+    (dataset_metadatas_map, dataframes)
 }
 
 async fn correlate_view(
@@ -84,9 +70,13 @@ async fn correlate_view(
         >,
     >,
     revenues: HashMap<String, f64>,
+    fiscal_year_end: Option<u32>,
+    params: RevenueParameters,
 ) -> warp::reply::Json {
-    let (dataset_metadatas_map, transformed_dataframes) = pre_process_future.await;
-    let transformed_dataframes = Arc::clone(&transformed_dataframes);
+    let correlation_metric = correlation_metric_from_str(params.correlation_metric);
+
+    let (dataset_metadatas_map, dataframes) = pre_process_future.await;
+    let dataframes = Arc::clone(&dataframes);
     let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
 
     let pool = ThreadPoolBuilder::new()
@@ -96,6 +86,27 @@ async fn correlate_view(
 
     let correlations: Vec<_> = pool.install(|| {
         // Fetch the revenues for the stock
+        let now = SystemTime::now();
+
+        let transformed_dataframes: Arc<HashMap<String, DataFrame>> =
+            Arc::new(pool.install(|| {
+                let transformed_dataframes = dataframes
+                    .par_iter()
+                    .map(|(name, df)| {
+                        let transformed_df = core_logic::data_processing::transform_data(
+                            df,
+                            AggregationPeriod::Quarterly,
+                            fiscal_year_end.unwrap_or(12) as i8,
+                            correlation_metric,
+                        );
+                        (name.clone(), transformed_df)
+                    })
+                    .collect();
+                transformed_dataframes
+            }));
+
+        println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
+
         let df1 = revenues_to_dataframe(revenues);
         let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
             .par_iter()
@@ -106,9 +117,10 @@ async fn correlate_view(
                     _ => String::from(""),
                 };
                 let series_id = metadata.internal_name.clone();
-                let correlation_dp = correlate(&df1, df2, title, series_id, 0);
+                let correlation_dp = correlate(&df1, df2, title, series_id, params.lag_periods);
                 correlation_dp
             })
+            .flatten()
             .collect();
 
         correlations.sort_by(|a, b| {
@@ -167,11 +179,13 @@ async fn main() {
 
             // TODO: Use fiscal year end when we implement it
             match result {
-                Ok(value) => Ok(value.0),
+                Ok(value) => Ok((value.0, value.1, params)),
                 Err(_) => return Err(warp::reject::custom(InternalServerError)),
             }
         })
-        .then(move |revenues| correlate_view(shared_future.clone(), revenues));
+        .then(move |(revenues, fiscal_year_end, params)| {
+            correlate_view(shared_future.clone(), revenues, fiscal_year_end, params)
+        });
 
     // Start the webserver
     let port: u16 = env::var("PORT")

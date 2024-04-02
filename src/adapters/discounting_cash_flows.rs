@@ -1,4 +1,4 @@
-use crate::database::models::AggregationPeriod;
+use crate::api::models::AggregationPeriod;
 use chrono::Datelike;
 use chrono::NaiveDate;
 use reqwest::Error;
@@ -15,7 +15,7 @@ pub async fn fetch_stock_revenues(
     stock: &str,
     start_year: i32,
     aggregation_period: AggregationPeriod,
-) -> Result<(HashMap<String, f64>, Option<String>), Error> {
+) -> Result<(HashMap<String, f64>, Option<u32>), Error> {
     match aggregation_period {
         AggregationPeriod::Annually => {
             let url = format!(
@@ -34,7 +34,6 @@ pub async fn fetch_stock_revenues(
                 NaiveDate::parse_from_str(&report[0]["date"].as_str().unwrap(), "%Y-%m-%d")
                     .unwrap()
                     .month();
-            let fiscal_year_end = format!("{:02}", reporting_date_month);
 
             let mut revenues = HashMap::new();
 
@@ -47,7 +46,7 @@ pub async fn fetch_stock_revenues(
                 revenues.insert(date, item["revenue"].as_f64().unwrap());
             }
 
-            Ok((revenues, Some(fiscal_year_end)))
+            Ok((revenues, Some(reporting_date_month)))
         }
         AggregationPeriod::Quarterly => {
             let url = format!("https://discountingcashflows.com/api/income-statement/quarterly/{}/?key=e787734f-59d8-4809-8955-1502cb22ba36", stock);
@@ -72,12 +71,10 @@ pub async fn fetch_stock_revenues(
                 _ => 0,
             };
 
-            let mut updated_month: i32 = reporting_date_month as i32 + delta;
+            let mut updated_month: u32 = reporting_date_month as u32 + delta;
             if updated_month > 12 {
                 updated_month = ((updated_month - 1) % 12) + 1;
             }
-
-            let fiscal_year_end = format!("{:02}", updated_month);
 
             let mut revenues = HashMap::new();
 
@@ -90,7 +87,7 @@ pub async fn fetch_stock_revenues(
                 revenues.insert(date, item["revenue"].as_f64().unwrap());
             }
 
-            Ok((revenues, Some(fiscal_year_end)))
+            Ok((revenues, Some(updated_month)))
         }
     }
 }

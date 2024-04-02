@@ -23,8 +23,3 @@ pub struct Dataset {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub metadata_id: i64,
 }
-
-pub enum AggregationPeriod {
-    Quarterly,
-    Annually,
-}

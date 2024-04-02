@@ -19,3 +19,6 @@ tokio = { version = "1.36.0", features = ["full"] }
 serde_json = "1.0.115"
 reqwest = { version = "0.12.2", features = ["json"] }
 futures = "0.3.30"
+
+[dev-dependencies]
+approx = "0.5.1"
