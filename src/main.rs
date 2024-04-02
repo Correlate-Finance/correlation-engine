@@ -14,6 +14,8 @@ use api::models::{CorrelateDataPoint, CorrelationData};
 use core_logic::data_processing::revenues_to_dataframe;
 use database::models::DatasetMetadata;
 
+use futures::future::FutureExt;
+use futures::future::Shared;
 use polars::frame::DataFrame;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -32,10 +34,10 @@ struct RevenueParameters {
     aggregation_period: String,
 }
 
-#[tokio::main]
-async fn main() {
-    println!("Starting set up");
-
+async fn pre_process_datasets() -> (
+    Arc<HashMap<std::string::String, DatasetMetadata>>,
+    Arc<HashMap<std::string::String, polars::prelude::DataFrame>>,
+) {
     let pool = ThreadPoolBuilder::new()
         .stack_size(32 * 1024 * 1024) // 32 MB
         .build()
@@ -69,28 +71,72 @@ async fn main() {
 
     println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
 
-    // let correlations_route = warp::path("correlations").map({
-    //     let transformed_dataframes = Arc::clone(&transformed_dataframes);
-    //     move || {
-    //         let (name, df1) = transformed_dataframes.iter().next().unwrap();
-    //         let pool = ThreadPoolBuilder::new()
-    //             .stack_size(32 * 1024 * 1024) // 32 MB
-    //             .build()
-    //             .unwrap();
+    (dataset_metadatas_map, transformed_dataframes)
+}
 
-    //         let correlations: Vec<_> = pool.install(|| {
-    //             transformed_dataframes
-    //                 .par_iter()
-    //                 .filter(|(name2, _)| *name != **name2)
-    //                 .map(|(name2, df2)| {
-    //                     let correlation = correlate(df1, df2);
-    //                     (name.clone(), name2.clone(), correlation)
-    //                 })
-    //                 .collect()
-    //         });
-    //         warp::reply::json(&correlations)
-    //     }
-    // });
+async fn correlate_view(
+    pre_process_future: Shared<
+        impl std::future::Future<
+            Output = (
+                Arc<HashMap<std::string::String, DatasetMetadata>>,
+                Arc<HashMap<std::string::String, polars::prelude::DataFrame>>,
+            ),
+        >,
+    >,
+    revenues: HashMap<String, f64>,
+) -> warp::reply::Json {
+    let (dataset_metadatas_map, transformed_dataframes) = pre_process_future.await;
+    let transformed_dataframes = Arc::clone(&transformed_dataframes);
+    let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
+
+    let pool = ThreadPoolBuilder::new()
+        .stack_size(32 * 1024 * 1024) // 32 MB
+        .build()
+        .unwrap();
+
+    let correlations: Vec<_> = pool.install(|| {
+        // Fetch the revenues for the stock
+        let df1 = revenues_to_dataframe(revenues);
+        let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
+            .par_iter()
+            .map(|(name2, df2)| {
+                let metadata: &DatasetMetadata = dataset_metadatas_map.get(name2).unwrap();
+                let title = match &metadata.external_name {
+                    Some(title) => title.clone(),
+                    _ => String::from(""),
+                };
+                let series_id = metadata.internal_name.clone();
+                let correlation_dp = correlate(&df1, df2, title, series_id, 0);
+                correlation_dp
+            })
+            .collect();
+
+        correlations.sort_by(|a, b| {
+            b.pearson_value
+                .partial_cmp(&a.pearson_value)
+                .unwrap_or(Ordering::Equal)
+        });
+
+        correlations.truncate(100);
+        correlations
+    });
+
+    warp::reply::json(&CorrelationData {
+        data: correlations,
+        aggregation_period: "Quarterly".to_string(),
+        correlation_metric: "RAW_VALUE".to_string(),
+    })
+}
+
+#[tokio::main]
+async fn main() {
+    println!("Starting set up");
+
+    let pre_process_future = pre_process_datasets();
+    let shared_future = pre_process_future.shared();
+
+    // Run the future in the background
+    tokio::spawn(shared_future.clone());
 
     let revenue_route = warp::path("revenue")
         .and(warp::query::<RevenueParameters>())
@@ -125,50 +171,7 @@ async fn main() {
                 Err(_) => return Err(warp::reject::custom(InternalServerError)),
             }
         })
-        .map({
-            let transformed_dataframes = Arc::clone(&transformed_dataframes);
-            let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
-            move |revenues| {
-                let pool = ThreadPoolBuilder::new()
-                    .stack_size(32 * 1024 * 1024) // 32 MB
-                    .build()
-                    .unwrap();
-
-                let correlations: Vec<_> = pool.install(|| {
-                    // Fetch the revenues for the stock
-                    let df1 = revenues_to_dataframe(revenues);
-                    let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
-                        .par_iter()
-                        .map(|(name2, df2)| {
-                            let metadata: &DatasetMetadata =
-                                dataset_metadatas_map.get(name2).unwrap();
-                            let title = match &metadata.external_name {
-                                Some(title) => title.clone(),
-                                _ => String::from(""),
-                            };
-                            let series_id = metadata.internal_name.clone();
-                            let correlation_dp = correlate(&df1, df2, title, series_id, 0);
-                            correlation_dp
-                        })
-                        .collect();
-
-                    correlations.sort_by(|a, b| {
-                        b.pearson_value
-                            .partial_cmp(&a.pearson_value)
-                            .unwrap_or(Ordering::Equal)
-                    });
-
-                    correlations.truncate(100);
-                    correlations
-                });
-
-                warp::reply::json(&CorrelationData {
-                    data: correlations,
-                    aggregation_period: "Quarterly".to_string(),
-                    correlation_metric: "RAW_VALUE".to_string(),
-                })
-            }
-        });
+        .then(move |revenues| correlate_view(shared_future.clone(), revenues));
 
     // Start the webserver
     let port: u16 = env::var("PORT")

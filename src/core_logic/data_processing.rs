@@ -7,6 +7,10 @@ use crate::database::models::{AggregationPeriod, Dataset, DatasetMetadata};
 
 pub fn transform_data(df: &DataFrame, time_increment: AggregationPeriod) -> DataFrame {
     // Group by aggregation period
+    if df.shape().0 == 0 {
+        return df.clone();
+    }
+
     let q_df = match time_increment {
         AggregationPeriod::Quarterly => {
             let q_df = df
@@ -94,12 +98,6 @@ pub fn correlate(
     // Joining df1 and df2 on "key"
 
     let combined_df = df1.inner_join(&df2, ["Date"], ["Date"]).unwrap();
-    println!(
-        "{} {} {}",
-        df1.estimated_size(),
-        df2.estimated_size(),
-        combined_df.estimated_size(),
-    );
 
     let dates: Vec<String> = combined_df
         .column("Date")
@@ -207,5 +205,26 @@ mod tests {
         assert_eq!(result.dates, vec!["2022-01-01", "2022-01-02"]);
     }
 
-    // Add more test functions for the other methods in this file
+    #[test]
+    fn test_transform_data() {
+        // Create a sample DataFrame
+        let df = DataFrame::new(vec![
+            Series::new("Date", &[1, 2, 3, 4, 5]),
+            Series::new("Value", &[10, 20, 30, 40, 50]),
+        ])
+        .unwrap();
+
+        // Call the transform_data function
+        let result = transform_data(&df, AggregationPeriod::Quarterly);
+
+        // Define the expected output DataFrame
+        let expected = DataFrame::new(vec![
+            Series::new("Date", &[1, 2, 3, 4, 5]),
+            Series::new("Value", &[10, 20, 30, 40, 50]),
+        ])
+        .unwrap();
+
+        // Assert that the result matches the expected output
+        assert_eq!(result, expected);
+    }
 }
