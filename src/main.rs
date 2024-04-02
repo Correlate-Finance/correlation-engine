@@ -181,6 +181,6 @@ async fn main() {
 
     println!("Starting web server! on {}", port);
     warp::serve(revenue_route.or(correlate_route))
-        .run(([127, 0, 0, 1], port))
+        .run(([0, 0, 0, 0], port))
         .await;
 }
