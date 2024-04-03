@@ -20,7 +20,7 @@ use futures::future::Shared;
 use polars::frame::DataFrame;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env;
@@ -28,10 +28,11 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use warp::Filter;
 
-#[derive(Deserialize, Clone)]
-struct RevenueParameters {
+#[derive(Serialize, Deserialize, Clone)]
+struct ApiParameters {
     stock: String,
     start_year: i32,
+    end_year: Option<i32>,
     aggregation_period: String,
     lag_periods: usize,
     correlation_metric: String,
@@ -71,12 +72,17 @@ async fn correlate_view(
     >,
     revenues: HashMap<String, f64>,
     fiscal_year_end: Option<u32>,
-    params: RevenueParameters,
+    params: ApiParameters,
 ) -> warp::reply::Json {
     let correlation_metric = correlation_metric_from_str(params.correlation_metric.clone());
     let (dataset_metadatas_map, dataframes) = pre_process_future.await;
     let dataframes = Arc::clone(&dataframes);
     let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
+
+    let end_date: chrono::NaiveDate = match params.end_year {
+        Some(year) => chrono::NaiveDate::from_ymd_opt(year, 12, 1).unwrap(),
+        None => chrono::offset::Utc::now().date_naive(),
+    };
 
     let pool = ThreadPoolBuilder::new()
         .stack_size(32 * 1024 * 1024) // 32 MB
@@ -97,6 +103,7 @@ async fn correlate_view(
                             AggregationPeriod::Quarterly,
                             fiscal_year_end.unwrap_or(12) as i8,
                             correlation_metric,
+                            end_date,
                         );
                         (name.clone(), transformed_df)
                     })
@@ -150,8 +157,8 @@ async fn main() {
     tokio::spawn(shared_future.clone());
 
     let revenue_route = warp::path("revenue")
-        .and(warp::query::<RevenueParameters>())
-        .and_then(|params: RevenueParameters| async move {
+        .and(warp::query::<ApiParameters>())
+        .and_then(|params: ApiParameters| async move {
             let aggregation_period = match params.aggregation_period.as_str() {
                 "Quarterly" => AggregationPeriod::Quarterly,
                 _ => AggregationPeriod::Annually,
@@ -166,8 +173,8 @@ async fn main() {
         });
 
     let correlate_route = warp::path("correlate")
-        .and(warp::query::<RevenueParameters>())
-        .and_then(move |params: RevenueParameters| async move {
+        .and(warp::query::<ApiParameters>())
+        .and_then(move |params: ApiParameters| async move {
             let aggregation_period = match params.aggregation_period.as_str() {
                 "Quarterly" => AggregationPeriod::Quarterly,
                 _ => AggregationPeriod::Annually,

@@ -1,5 +1,5 @@
 use crate::api::models::{AggregationPeriod, CorrelateDataPoint, CorrelationMetric};
-use ndarray::Data;
+use chrono::NaiveDate;
 use ndarray_stats::CorrelationExt;
 use polars::prelude::*;
 use std::collections::HashMap;
@@ -33,17 +33,18 @@ pub fn transform_data(
     time_increment: AggregationPeriod,
     fiscal_year_end: i8,
     correlation_metric: CorrelationMetric,
+    end_date: NaiveDate,
 ) -> DataFrame {
     // Group by aggregation period
     if df.shape().0 == 0 {
         return df.clone();
     }
 
-    let q_df = match time_increment {
+    let lazy_df = df.clone().lazy().filter(col("Date").lt(lit(end_date)));
+
+    let updated_df = match time_increment {
         AggregationPeriod::Quarterly => {
-            let q_df = df
-                .clone()
-                .lazy()
+            let q_df = lazy_df
                 .with_column(
                     (when(col("Date").dt().month().gt(fiscal_year_end))
                         .then((col("Date").dt().year() + lit(1)).cast(DataType::String))
@@ -57,20 +58,20 @@ pub fn transform_data(
                 )
                 .group_by(vec![col("Date")])
                 .agg(vec![col("Value").sum().alias("Value")])
-                .sort("Date", Default::default())
-                .collect()
-                .unwrap();
+                .sort("Date", Default::default());
 
             q_df
         }
         AggregationPeriod::Annually => {
             // Implement Annually logic
             // ...
-            df.clone()
+            lazy_df
         }
-    };
+    }
+    .collect()
+    .unwrap();
 
-    transform_correlation_metric(q_df, correlation_metric)
+    transform_correlation_metric(updated_df, correlation_metric)
 }
 
 pub fn create_dataframes(
@@ -306,6 +307,7 @@ mod tests {
             AggregationPeriod::Quarterly,
             12,
             CorrelationMetric::RawValue,
+            chrono::offset::Utc::now().date_naive(),
         );
 
         // Define the expected output DataFrame
@@ -344,12 +346,52 @@ mod tests {
             AggregationPeriod::Quarterly,
             3,
             CorrelationMetric::RawValue,
+            chrono::offset::Utc::now().date_naive(),
         );
 
         // Define the expected output DataFrame
         let expected = DataFrame::new(vec![
             Series::new("Date", &["2020Q4", "2021Q1"]),
             Series::new("Value", &[60, 150]),
+        ])
+        .unwrap();
+
+        // Assert that the result matches the expected output
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_transform_data_end_year() {
+        // Create a sample DataFrame
+        let df = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    NaiveDate::from_ymd_opt(2020, 1, 1),
+                    NaiveDate::from_ymd_opt(2020, 2, 1),
+                    NaiveDate::from_ymd_opt(2020, 3, 1),
+                    NaiveDate::from_ymd_opt(2020, 4, 1),
+                    NaiveDate::from_ymd_opt(2020, 5, 1),
+                    NaiveDate::from_ymd_opt(2020, 6, 1),
+                ],
+            ),
+            Series::new("Value", &[10, 20, 30, 40, 50, 60]),
+        ])
+        .unwrap();
+
+        // Call the transform_data function
+        let result = transform_data(
+            &df,
+            AggregationPeriod::Quarterly,
+            3,
+            CorrelationMetric::RawValue,
+            NaiveDate::from_ymd_opt(2020, 3, 2).unwrap(),
+        );
+
+        // Define the expected output DataFrame
+        let expected = DataFrame::new(vec![
+            Series::new("Date", &["2020Q4"]),
+            Series::new("Value", &[60]),
         ])
         .unwrap();
 
@@ -400,6 +442,7 @@ mod tests {
             AggregationPeriod::Quarterly,
             12,
             CorrelationMetric::YoyGrowth,
+            chrono::offset::Utc::now().date_naive(),
         );
 
         // Define the expected output DataFrame
