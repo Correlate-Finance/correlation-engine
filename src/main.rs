@@ -73,8 +73,7 @@ async fn correlate_view(
     fiscal_year_end: Option<u32>,
     params: RevenueParameters,
 ) -> warp::reply::Json {
-    let correlation_metric = correlation_metric_from_str(params.correlation_metric);
-
+    let correlation_metric = correlation_metric_from_str(params.correlation_metric.clone());
     let (dataset_metadatas_map, dataframes) = pre_process_future.await;
     let dataframes = Arc::clone(&dataframes);
     let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
@@ -117,8 +116,8 @@ async fn correlate_view(
                     _ => String::from(""),
                 };
                 let series_id = metadata.internal_name.clone();
-                let correlation_dp = correlate(&df1, df2, title, series_id, params.lag_periods);
-                correlation_dp
+                let correlations = correlate(&df1, df2, title, series_id, params.lag_periods);
+                correlations
             })
             .flatten()
             .collect();
@@ -135,8 +134,8 @@ async fn correlate_view(
 
     warp::reply::json(&CorrelationData {
         data: correlations,
-        aggregation_period: "Quarterly".to_string(),
-        correlation_metric: "RAW_VALUE".to_string(),
+        aggregation_period: params.aggregation_period,
+        correlation_metric: params.correlation_metric,
     })
 }
 

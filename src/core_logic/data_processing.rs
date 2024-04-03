@@ -120,7 +120,6 @@ pub fn correlate(
     lag: usize,
 ) -> Vec<CorrelateDataPoint> {
     // Joining df1 and df2 on "key"
-
     let combined_df = dataset_df
         .inner_join(&input_df, ["Date"], ["Date"])
         .unwrap();
@@ -193,18 +192,8 @@ pub fn revenues_to_dataframe(revenues: HashMap<String, f64>) -> DataFrame {
     let value_series = Series::new("Value", values);
 
     // Create DataFrame
-    let df = DataFrame::new(vec![
-        date_series.cast(&DataType::Date).unwrap(),
-        value_series,
-    ])
-    .unwrap();
-
-    transform_data(
-        &df,
-        AggregationPeriod::Quarterly,
-        12,
-        CorrelationMetric::RawValue,
-    )
+    let df = DataFrame::new(vec![date_series, value_series]).unwrap();
+    df
 }
 
 #[cfg(test)]
