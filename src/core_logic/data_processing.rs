@@ -207,8 +207,9 @@ pub fn revenues_to_dataframe(
 
     // Create DataFrame
     let df = DataFrame::new(vec![date_series, value_series]).unwrap();
+    let sorted_df = df.sort(["Date"], false, false).unwrap();
 
-    transform_correlation_metric(df, correlation_metric)
+    transform_correlation_metric(sorted_df, correlation_metric)
 }
 
 #[cfg(test)]
@@ -426,5 +427,50 @@ mod tests {
                 assert_abs_diff_eq!(result_value, expected_value, epsilon = 1e-6);
             }
         }
+    }
+
+    #[test]
+    fn test_revenues_to_dataframe() {
+        // Create a vector of revenues
+        let mut revenues = HashMap::new();
+
+        // Randomly insert year values
+        revenues.insert("2020Q2".into(), 1.0);
+        revenues.insert("2020Q1".into(), 1.0);
+        revenues.insert("2020Q4".into(), 1.0);
+        revenues.insert("2020Q3".into(), 1.0);
+        revenues.insert("2021Q3".into(), 4.0);
+        revenues.insert("2021Q1".into(), 2.0);
+        revenues.insert("2021Q2".into(), 3.0);
+        revenues.insert("2021Q4".into(), 5.0);
+
+        // Call revenues_to_dataframe with different values of CorrelationMetric
+        let df_yoy_growth = revenues_to_dataframe(revenues.clone(), CorrelationMetric::YoyGrowth);
+        let df_raw_value = revenues_to_dataframe(revenues, CorrelationMetric::RawValue);
+
+        // Check that the returned DataFrames have the expected properties
+        assert_eq!(df_raw_value.shape(), (8, 2));
+
+        // yoy growth the first 4 values are dropped
+        assert_eq!(df_yoy_growth.shape(), (4, 2));
+
+        let expected_raw_value = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                &[
+                    "2020Q1", "2020Q2", "2020Q3", "2020Q4", "2021Q1", "2021Q2", "2021Q3", "2021Q4",
+                ],
+            ),
+            Series::new("Value", &[1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0]),
+        ])
+        .unwrap();
+        let expected_yoy_growth = DataFrame::new(vec![
+            Series::new("Date", &["2021Q1", "2021Q2", "2021Q3", "2021Q4"]),
+            Series::new("Value", &[1.0, 2.0, 3.0, 4.0]),
+        ])
+        .unwrap();
+
+        assert_eq!(expected_raw_value, df_raw_value);
+        assert_eq!(expected_yoy_growth, df_yoy_growth);
     }
 }
