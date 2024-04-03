@@ -1,9 +1,32 @@
 use crate::api::models::{AggregationPeriod, CorrelateDataPoint, CorrelationMetric};
+use ndarray::Data;
 use ndarray_stats::CorrelationExt;
 use polars::prelude::*;
 use std::collections::HashMap;
 
 use crate::database::models::{Dataset, DatasetMetadata};
+
+pub fn transform_correlation_metric(
+    df: DataFrame,
+    correlation_metric: CorrelationMetric,
+) -> DataFrame {
+    let mut updated_df = df;
+    if matches!(correlation_metric, CorrelationMetric::YoyGrowth) {
+        updated_df = updated_df
+            .clone()
+            .lazy()
+            .with_column((col("Value") / col("Value").shift(lit(4)) - lit(1)).alias("Value"))
+            .collect()
+            .unwrap();
+
+        let mask = updated_df
+            .column("Value")
+            .expect("Value column should exist")
+            .is_not_null();
+        updated_df = updated_df.filter(&mask).unwrap();
+    }
+    updated_df
+}
 
 pub fn transform_data(
     df: &DataFrame,
@@ -47,22 +70,7 @@ pub fn transform_data(
         }
     };
 
-    if matches!(correlation_metric, CorrelationMetric::YoyGrowth) {
-        q_df = q_df
-            .clone()
-            .lazy()
-            .with_column((col("Value") / col("Value").shift(lit(4)) - lit(1)).alias("Value"))
-            .collect()
-            .unwrap();
-
-        let mask = q_df
-            .column("Value")
-            .expect("Value column should exist")
-            .is_not_null();
-        q_df = q_df.filter(&mask).unwrap();
-    }
-
-    q_df
+    transform_correlation_metric(q_df, correlation_metric)
 }
 
 pub fn create_dataframes(
@@ -122,6 +130,8 @@ pub fn correlate(
     // Joining df1 and df2 on "key"
     let combined_df = dataset_df
         .inner_join(&input_df, ["Date"], ["Date"])
+        .unwrap()
+        .sort(["Date"], false, false)
         .unwrap();
 
     let dates: Vec<String> = combined_df
@@ -144,13 +154,13 @@ pub fn correlate(
     let mut correlate_data_points = Vec::new();
 
     for i in 0..(lag + 1) {
-        let input_data_shifted: Vec<f64> = if i < input_data.len() {
+        let mut input_data_shifted: Vec<f64> = if i < input_data.len() {
             input_data[i..].to_vec()
         } else {
             break;
         };
 
-        let dataset_data_shifted: Vec<f64> = if i < dataset_data.len() {
+        let mut dataset_data_shifted: Vec<f64> = if i < dataset_data.len() {
             dataset_data[..dataset_data.len() - i].to_vec()
         } else {
             break;
@@ -170,6 +180,12 @@ pub fn correlate(
         .unwrap();
 
         let pearson_correlation = correlation_matrix[[0, 1]];
+        let mut lag_padding_vec = vec![0.0; i];
+        let mut lag_start_vec = vec![0.0; i];
+
+        // Append zeroes to the end of input_data and start of dataset_data to graph them correctly
+        input_data_shifted.append(&mut lag_padding_vec);
+        lag_start_vec.append(&mut dataset_data_shifted);
 
         correlate_data_points.push(CorrelateDataPoint {
             title: title.clone(),
@@ -177,7 +193,7 @@ pub fn correlate(
             pearson_value: pearson_correlation,
             lag: i,
             input_data: input_data_shifted,
-            dataset_data: dataset_data_shifted,
+            dataset_data: lag_start_vec,
             dates: dates.clone(),
         });
     }
@@ -185,7 +201,10 @@ pub fn correlate(
     correlate_data_points
 }
 
-pub fn revenues_to_dataframe(revenues: HashMap<String, f64>) -> DataFrame {
+pub fn revenues_to_dataframe(
+    revenues: HashMap<String, f64>,
+    correlation_metric: CorrelationMetric,
+) -> DataFrame {
     let (dates, values): (Vec<_>, Vec<_>) = revenues.into_iter().unzip();
 
     let date_series = Series::new("Date", dates);
@@ -193,7 +212,8 @@ pub fn revenues_to_dataframe(revenues: HashMap<String, f64>) -> DataFrame {
 
     // Create DataFrame
     let df = DataFrame::new(vec![date_series, value_series]).unwrap();
-    df
+
+    transform_correlation_metric(df, correlation_metric)
 }
 
 #[cfg(test)]

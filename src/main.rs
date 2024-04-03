@@ -106,7 +106,7 @@ async fn correlate_view(
 
         println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
 
-        let df1 = revenues_to_dataframe(revenues);
+        let df1 = revenues_to_dataframe(revenues, correlation_metric);
         let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
             .par_iter()
             .map(|(name2, df2)| {
@@ -122,7 +122,7 @@ async fn correlate_view(
             .flatten()
             .collect();
 
-        correlations.sort_by(|a, b| {
+        correlations.sort_by(|a, b: &CorrelateDataPoint| {
             b.pearson_value
                 .partial_cmp(&a.pearson_value)
                 .unwrap_or(Ordering::Equal)
