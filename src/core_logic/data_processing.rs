@@ -39,7 +39,7 @@ pub fn transform_data(
         return df.clone();
     }
 
-    let mut q_df = match time_increment {
+    let q_df = match time_increment {
         AggregationPeriod::Quarterly => {
             let q_df = df
                 .clone()
@@ -166,20 +166,15 @@ pub fn correlate(
             break;
         };
 
-        let correlation_matrix = ndarray::Array::from_shape_vec(
-            (input_data_shifted.len(), 2),
-            input_data_shifted
-                .iter()
-                .cloned()
-                .chain(dataset_data_shifted.iter().cloned())
-                .collect(),
-        )
-        .unwrap()
-        .t()
-        .pearson_correlation()
-        .unwrap();
+        let mut correlation_matrix = ndarray::Array::zeros((0, input_data_shifted.len()));
+        correlation_matrix
+            .push_row(ndarray::ArrayView::from(&dataset_data_shifted))
+            .unwrap();
+        correlation_matrix
+            .push_row(ndarray::ArrayView::from(&input_data_shifted))
+            .unwrap();
 
-        let pearson_correlation = correlation_matrix[[0, 1]];
+        let pearson_correlation = correlation_matrix.pearson_correlation().unwrap()[[0, 1]];
         let mut lag_padding_vec = vec![0.0; i];
         let mut lag_start_vec = vec![0.0; i];
 
@@ -226,12 +221,32 @@ mod tests {
     fn test_correlate() {
         // Arrange
         let df1 = DataFrame::new(vec![
-            Series::new("Date", vec!["2022-01-01", "2022-01-02"]),
-            Series::new("Value", vec![1.0, 2.0]),
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                ],
+            ),
+            Series::new("Value", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
         ]);
         let df2 = DataFrame::new(vec![
-            Series::new("Date", vec!["2022-01-01", "2022-01-02"]),
-            Series::new("Value", vec![3.0, 4.0]),
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                ],
+            ),
+            Series::new("Value", vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0]),
         ]);
         let series_id = "test_series".to_string();
         let lag = 0;
@@ -249,11 +264,21 @@ mod tests {
         // Assert
         assert_eq!(result.title, "title");
         assert_eq!(result.internal_name, "test_series");
-        assert_eq!(result.pearson_value, 1.0);
+        assert_abs_diff_eq!(result.pearson_value, -0.755928946, epsilon = 1e-6);
         assert_eq!(result.lag, 0);
-        assert_eq!(result.input_data, vec![1.0, 2.0]);
-        assert_eq!(result.dataset_data, vec![3.0, 4.0]);
-        assert_eq!(result.dates, vec!["2022-01-01", "2022-01-02"]);
+        assert_eq!(result.input_data, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(result.dataset_data, vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0]);
+        assert_eq!(
+            result.dates,
+            vec![
+                "2022-01-01",
+                "2022-02-01",
+                "2022-03-01",
+                "2022-04-01",
+                "2022-05-01",
+                "2022-06-01",
+            ],
+        );
     }
 
     #[test]
