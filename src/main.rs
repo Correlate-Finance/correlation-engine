@@ -15,6 +15,7 @@ use core_logic::data_processing::correlate;
 use core_logic::data_processing::revenues_to_dataframe;
 use database::models::DatasetMetadata;
 
+use chrono::Datelike;
 use futures::future::FutureExt;
 use futures::future::Shared;
 use polars::frame::DataFrame;
@@ -163,9 +164,18 @@ async fn main() {
                 "Quarterly" => AggregationPeriod::Quarterly,
                 _ => AggregationPeriod::Annually,
             };
+            let end_year: i32 = match params.end_year {
+                Some(year) => year,
+                None => chrono::Utc::now().date_naive().year(),
+            };
 
-            let result =
-                fetch_stock_revenues(&params.stock, params.start_year, aggregation_period).await;
+            let result = fetch_stock_revenues(
+                &params.stock,
+                params.start_year,
+                end_year,
+                aggregation_period,
+            )
+            .await;
             match result {
                 Ok((revenues, _)) => Ok(warp::reply::json(&revenues)),
                 Err(_) => Err(warp::reject::custom(InternalServerError)),
@@ -179,9 +189,18 @@ async fn main() {
                 "Quarterly" => AggregationPeriod::Quarterly,
                 _ => AggregationPeriod::Annually,
             };
+            let end_year: i32 = match params.end_year {
+                Some(year) => year,
+                None => chrono::Utc::now().date_naive().year(),
+            };
 
-            let result =
-                fetch_stock_revenues(&params.stock, params.start_year, aggregation_period).await;
+            let result = fetch_stock_revenues(
+                &params.stock,
+                params.start_year,
+                end_year,
+                aggregation_period,
+            )
+            .await;
 
             // TODO: Use fiscal year end when we implement it
             match result {

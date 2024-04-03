@@ -14,6 +14,7 @@ impl reject::Reject for InternalServerError {}
 pub async fn fetch_stock_revenues(
     stock: &str,
     start_year: i32,
+    end_year: i32,
     aggregation_period: AggregationPeriod,
 ) -> Result<(HashMap<String, f64>, Option<u32>), Error> {
     match aggregation_period {
@@ -38,9 +39,9 @@ pub async fn fetch_stock_revenues(
             let mut revenues = HashMap::new();
 
             for item in report {
-                let year = item["calendarYear"].as_str().unwrap();
+                let year = item["calendarYear"].as_str().unwrap().parse::<i32>().unwrap() ;
                 let date = format!("{}-01-01", year);
-                if year.parse::<i32>().unwrap() < start_year {
+                if year < start_year || year > end_year {
                     continue;
                 }
                 revenues.insert(date, item["revenue"].as_f64().unwrap());
