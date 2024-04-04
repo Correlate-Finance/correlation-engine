@@ -8,11 +8,12 @@ mod database;
 
 use adapters::discounting_cash_flows::fetch_stock_revenues;
 use adapters::discounting_cash_flows::InternalServerError;
-use api::lib::{correlation_metric_from_str, month_index};
-use api::models::AggregationPeriod;
-use api::models::{CorrelateDataPoint, CorrelationData};
-use core_logic::data_processing::correlate;
-use core_logic::data_processing::revenues_to_dataframe;
+use api::lib::correlation_metric_from_str;
+use api::models::{
+    AggregationPeriod, CorrelateAutomaticRequestParameters, CorrelateDataPoint,
+    CorrelateRequestParameters, CorrelationData, ManualDataInput, RevenueRequestParameters,
+};
+use core_logic::data_processing::{correlate, manual_input_to_dataframe, revenues_to_dataframe};
 use database::models::DatasetMetadata;
 
 use chrono::Datelike;
@@ -21,23 +22,12 @@ use futures::future::Shared;
 use polars::frame::DataFrame;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use std::time::SystemTime;
 use warp::Filter;
-
-#[derive(Serialize, Deserialize, Clone)]
-struct ApiParameters {
-    stock: String,
-    start_year: i32,
-    end_year: Option<i32>,
-    aggregation_period: String,
-    lag_periods: usize,
-    correlation_metric: String,
-}
 
 async fn pre_process_datasets() -> (
     Arc<HashMap<std::string::String, DatasetMetadata>>,
@@ -71,9 +61,8 @@ async fn correlate_view(
             ),
         >,
     >,
-    revenues: HashMap<String, f64>,
-    fiscal_year_end: Option<u32>,
-    params: ApiParameters,
+    revenues: DataFrame,
+    params: CorrelateRequestParameters,
 ) -> warp::reply::Json {
     let correlation_metric = correlation_metric_from_str(params.correlation_metric.clone());
     let (dataset_metadatas_map, dataframes) = pre_process_future.await;
@@ -102,7 +91,7 @@ async fn correlate_view(
                         let transformed_df = core_logic::data_processing::transform_data(
                             df,
                             AggregationPeriod::Quarterly,
-                            fiscal_year_end.unwrap_or(12) as i8,
+                            params.fiscal_year_end.unwrap_or(12) as i8,
                             correlation_metric,
                             end_date,
                         );
@@ -114,7 +103,6 @@ async fn correlate_view(
 
         println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
 
-        let df1 = revenues_to_dataframe(revenues, correlation_metric);
         let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
             .par_iter()
             .map(|(name2, df2)| {
@@ -124,7 +112,7 @@ async fn correlate_view(
                     _ => String::from(""),
                 };
                 let series_id = metadata.internal_name.clone();
-                let correlations = correlate(&df1, df2, title, series_id, params.lag_periods);
+                let correlations = correlate(&revenues, df2, title, series_id, params.lag_periods);
                 correlations
             })
             .flatten()
@@ -154,12 +142,15 @@ async fn main() {
     let pre_process_future = pre_process_datasets();
     let shared_future = pre_process_future.shared();
 
+    let shared1 = shared_future.clone();
+    let shared2 = shared_future.clone();
+
     // Run the future in the background
     tokio::spawn(shared_future.clone());
 
     let revenue_route = warp::path("revenue")
-        .and(warp::query::<ApiParameters>())
-        .and_then(|params: ApiParameters| async move {
+        .and(warp::query::<RevenueRequestParameters>())
+        .and_then(|params: RevenueRequestParameters| async move {
             let aggregation_period = match params.aggregation_period.as_str() {
                 "Quarterly" => AggregationPeriod::Quarterly,
                 _ => AggregationPeriod::Annually,
@@ -183,34 +174,67 @@ async fn main() {
         });
 
     let correlate_route = warp::path("correlate")
-        .and(warp::query::<ApiParameters>())
-        .and_then(move |params: ApiParameters| async move {
-            let aggregation_period = match params.aggregation_period.as_str() {
-                "Quarterly" => AggregationPeriod::Quarterly,
-                _ => AggregationPeriod::Annually,
-            };
-            let end_year: i32 = match params.end_year {
-                Some(year) => year,
-                None => chrono::Utc::now().date_naive().year(),
-            };
+        .and(warp::query::<CorrelateAutomaticRequestParameters>())
+        .and_then(
+            move |params: CorrelateAutomaticRequestParameters| async move {
+                let aggregation_period = match params.aggregation_period.as_str() {
+                    "Quarterly" => AggregationPeriod::Quarterly,
+                    _ => AggregationPeriod::Annually,
+                };
+                let end_year: i32 = match params.end_year {
+                    Some(year) => year,
+                    None => chrono::Utc::now().date_naive().year(),
+                };
 
-            let result = fetch_stock_revenues(
-                &params.stock,
-                params.start_year,
-                end_year,
-                aggregation_period,
-            )
-            .await;
+                let result = fetch_stock_revenues(
+                    &params.stock,
+                    params.start_year,
+                    end_year,
+                    aggregation_period,
+                )
+                .await;
 
-            // TODO: Use fiscal year end when we implement it
-            match result {
-                Ok(value) => Ok((value.0, value.1, params)),
-                Err(_) => return Err(warp::reject::custom(InternalServerError)),
-            }
-        })
-        .then(move |(revenues, fiscal_year_end, params)| {
-            correlate_view(shared_future.clone(), revenues, fiscal_year_end, params)
-        });
+                // TODO: Use fiscal year end when we implement it
+                match result {
+                    Ok(value) => Ok((value.0, value.1, params)),
+                    Err(_) => return Err(warp::reject::custom(InternalServerError)),
+                }
+            },
+        )
+        .then(
+            move |(revenues, fiscal_year_end, params): (
+                HashMap<String, f64>,
+                Option<u32>,
+                CorrelateAutomaticRequestParameters,
+            )| {
+                let correlation_metric =
+                    correlation_metric_from_str(params.correlation_metric.clone());
+                let revenue_df = revenues_to_dataframe(revenues, correlation_metric);
+                let correlate_params = CorrelateRequestParameters {
+                    start_year: params.start_year,
+                    end_year: params.end_year,
+                    aggregation_period: params.aggregation_period,
+                    lag_periods: params.lag_periods,
+                    correlation_metric: params.correlation_metric,
+                    fiscal_year_end: fiscal_year_end,
+                };
+                correlate_view(shared1.clone(), revenue_df, correlate_params)
+            },
+        );
+
+    let correlate_input_route = warp::post()
+        .and(warp::path("correlate_input"))
+        .and(warp::body::json())
+        .and(warp::query::<CorrelateRequestParameters>())
+        .then(
+            move |manual_input_dataset: Vec<ManualDataInput>,
+                  params: CorrelateRequestParameters| {
+                // You can now use api_parameters in your handler
+                // ...
+                let df = manual_input_to_dataframe(manual_input_dataset);
+                correlate_view(shared2.clone(), df, params)
+            },
+        );
 
     // Start the webserver
     let port: u16 = env::var("PORT")
@@ -219,7 +243,7 @@ async fn main() {
         .expect("PORT must be a number");
 
     println!("Starting web server! on {}", port);
-    warp::serve(revenue_route.or(correlate_route))
+    warp::serve(revenue_route.or(correlate_route).or(correlate_input_route))
         .run(([0, 0, 0, 0], port))
         .await;
 }

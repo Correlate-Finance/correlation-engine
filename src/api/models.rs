@@ -29,3 +29,37 @@ pub enum AggregationPeriod {
     Quarterly,
     Annually,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CorrelateAutomaticRequestParameters {
+    pub stock: String,
+    pub start_year: i32,
+    pub end_year: Option<i32>,
+    pub aggregation_period: String,
+    pub lag_periods: usize,
+    pub correlation_metric: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CorrelateRequestParameters {
+    pub start_year: i32,
+    pub end_year: Option<i32>,
+    pub aggregation_period: String,
+    pub lag_periods: usize,
+    pub correlation_metric: String,
+    pub fiscal_year_end: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RevenueRequestParameters {
+    pub stock: String,
+    pub start_year: i32,
+    pub end_year: Option<i32>,
+    pub aggregation_period: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ManualDataInput {
+    pub date: String,
+    pub value: f64,
+}

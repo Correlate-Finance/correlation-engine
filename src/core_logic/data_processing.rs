@@ -1,4 +1,6 @@
-use crate::api::models::{AggregationPeriod, CorrelateDataPoint, CorrelationMetric};
+use crate::api::models::{
+    AggregationPeriod, CorrelateDataPoint, CorrelationMetric, ManualDataInput,
+};
 use chrono::NaiveDate;
 use ndarray_stats::CorrelationExt;
 use polars::prelude::*;
@@ -211,6 +213,24 @@ pub fn revenues_to_dataframe(
     let sorted_df = df.sort(["Date"], false, false).unwrap();
 
     transform_correlation_metric(sorted_df, correlation_metric)
+}
+
+pub fn manual_input_to_dataframe(manual_input: Vec<ManualDataInput>) -> DataFrame {
+    let date_series: Vec<_> = manual_input
+        .iter()
+        .map(|inp: &ManualDataInput| -> String { inp.date.clone() })
+        .collect::<Vec<String>>();
+
+    let value_series: Vec<_> = manual_input
+        .iter()
+        .map(|inp: &ManualDataInput| -> f64 { inp.value })
+        .collect::<Vec<f64>>();
+
+    DataFrame::new(vec![
+        Series::new("Date", date_series),
+        Series::new("Value", value_series),
+    ])
+    .unwrap()
 }
 
 #[cfg(test)]
