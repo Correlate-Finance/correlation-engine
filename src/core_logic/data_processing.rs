@@ -8,6 +8,8 @@ use std::collections::HashMap;
 
 use crate::database::models::{Dataset, DatasetMetadata};
 
+const MIN_SAMPLES: usize = 8;
+
 pub fn transform_correlation_metric(
     df: DataFrame,
     correlation_metric: CorrelationMetric,
@@ -169,6 +171,10 @@ pub fn correlate(
             break;
         };
 
+        if dataset_data_shifted.len() < MIN_SAMPLES {
+            break;
+        }
+
         let mut correlation_matrix = ndarray::Array::zeros((0, input_data_shifted.len()));
         correlation_matrix
             .push_row(ndarray::ArrayView::from(&dataset_data_shifted))
@@ -240,7 +246,7 @@ mod tests {
     use chrono::NaiveDate;
 
     #[test]
-    fn test_correlate() {
+    fn test_correlate_not_enough_data() {
         // Arrange
         let df1 = DataFrame::new(vec![
             Series::new(
@@ -281,15 +287,70 @@ mod tests {
             series_id,
             lag,
         );
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_correlate() {
+        // Arrange
+        let df1 = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                    "2022-07-01",
+                    "2022-08-01",
+                ],
+            ),
+            Series::new("Value", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+        ]);
+        let df2 = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                    "2022-07-01",
+                    "2022-08-01",
+                ],
+            ),
+            Series::new("Value", vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0]),
+        ]);
+        let series_id = "test_series".to_string();
+        let lag = 0;
+
+        // Act
+        let results = correlate(
+            &df1.unwrap(),
+            &df2.unwrap(),
+            String::from("title"),
+            series_id,
+            lag,
+        );
         let result = &results[0];
 
         // Assert
         assert_eq!(result.title, "title");
         assert_eq!(result.internal_name, "test_series");
-        assert_abs_diff_eq!(result.pearson_value, -0.755928946, epsilon = 1e-6);
+        assert_abs_diff_eq!(result.pearson_value, 0.27500954910, epsilon = 1e-6);
         assert_eq!(result.lag, 0);
-        assert_eq!(result.input_data, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
-        assert_eq!(result.dataset_data, vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0]);
+        assert_eq!(
+            result.input_data,
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+        );
+        assert_eq!(
+            result.dataset_data,
+            vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0]
+        );
         assert_eq!(
             result.dates,
             vec![
@@ -299,6 +360,8 @@ mod tests {
                 "2022-04-01",
                 "2022-05-01",
                 "2022-06-01",
+                "2022-07-01",
+                "2022-08-01",
             ],
         );
     }
