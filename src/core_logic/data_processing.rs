@@ -194,16 +194,16 @@ pub fn correlate(
         let mut lag_start_vec = vec![0.0; i];
 
         // Append zeroes to the end of input_data and start of dataset_data to graph them correctly
-        input_data_shifted.append(&mut lag_padding_vec);
-        lag_start_vec.append(&mut dataset_data_shifted);
+        dataset_data_shifted.append(&mut lag_padding_vec);
+        lag_start_vec.append(&mut input_data_shifted);
 
         correlate_data_points.push(CorrelateDataPoint {
             title: title.clone(),
             internal_name: series_id.clone(),
             pearson_value: pearson_correlation,
             lag: i,
-            input_data: input_data_shifted,
-            dataset_data: lag_start_vec,
+            input_data: lag_start_vec,
+            dataset_data: dataset_data_shifted,
             dates: dates.clone(),
         });
     }
@@ -368,6 +368,90 @@ mod tests {
                 "2022-06-01",
                 "2022-07-01",
                 "2022-08-01",
+            ],
+        );
+    }
+
+    #[test]
+    fn test_correlate_lag_1() {
+        // Arrange
+        let df1 = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                    "2022-07-01",
+                    "2022-08-01",
+                    "2022-09-01",
+                ],
+            ),
+            Series::new("Value", vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
+        ]);
+        let df2 = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    "2022-01-01",
+                    "2022-02-01",
+                    "2022-03-01",
+                    "2022-04-01",
+                    "2022-05-01",
+                    "2022-06-01",
+                    "2022-07-01",
+                    "2022-08-01",
+                    "2022-09-01",
+                ],
+            ),
+            Series::new(
+                "Value",
+                vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0, 15.0],
+            ),
+        ]);
+        let series_id = "test_series".to_string();
+        let lag = 1;
+
+        // Act
+        let results = correlate(
+            &df1.unwrap(),
+            &df2.unwrap(),
+            String::from("title"),
+            series_id,
+            lag,
+        );
+
+        assert_eq!(results.len(), 2);
+        let result = &results[1];
+
+        // Assert
+        assert_eq!(result.title, "title");
+        assert_eq!(result.internal_name, "test_series");
+        assert_abs_diff_eq!(result.pearson_value, 0.2750095491, epsilon = 1e-6);
+        assert_eq!(result.lag, 1);
+        assert_eq!(
+            result.input_data,
+            vec![0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+        assert_eq!(
+            result.dataset_data,
+            vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0, 0.0]
+        );
+        assert_eq!(
+            result.dates,
+            vec![
+                "2022-01-01",
+                "2022-02-01",
+                "2022-03-01",
+                "2022-04-01",
+                "2022-05-01",
+                "2022-06-01",
+                "2022-07-01",
+                "2022-08-01",
+                "2022-09-01",
             ],
         );
     }
