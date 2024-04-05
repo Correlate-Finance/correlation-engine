@@ -184,6 +184,12 @@ pub fn correlate(
             .unwrap();
 
         let pearson_correlation = correlation_matrix.pearson_correlation().unwrap()[[0, 1]];
+
+        // If the std_dev of the dataset is 0, the correlation is not finite
+        if !pearson_correlation.is_finite() {
+            break;
+        }
+
         let mut lag_padding_vec = vec![0.0; i];
         let mut lag_start_vec = vec![0.0; i];
 
