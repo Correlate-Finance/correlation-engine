@@ -82,28 +82,31 @@ pub fn create_dataframes(
     datasets: &Vec<Dataset>,
     metadata: &Vec<DatasetMetadata>,
 ) -> HashMap<String, DataFrame> {
+    let dataset_vectors: HashMap<i64, Vec<&Dataset>> =
+        datasets.iter().fold(HashMap::new(), |mut acc, dataset| {
+            let metadata_id = dataset.metadata_id.clone();
+            let dataset_vector = acc.entry(metadata_id).or_insert(Vec::new());
+            dataset_vector.push(dataset);
+            acc
+        });
     let mut dataframes: HashMap<String, DataFrame> = HashMap::new();
 
     for meta in metadata {
-        let relevant_datasets: Vec<&Dataset> = datasets
-            .iter()
-            .filter(|d| d.metadata_id == meta.id)
-            .collect();
+        let dataset_vec = dataset_vectors.get(&meta.id);
 
-        if relevant_datasets.is_empty() {
-            continue;
+        if let Some(dataset_vec) = dataset_vec {
+            // Transform relevant_datasets into a DataFrame
+            let df = datasets_to_dataframe(dataset_vec);
+
+            // Insert into HashMap
+            dataframes.insert(meta.internal_name.clone(), df);
         }
-        // Transform relevant_datasets into a DataFrame
-        let df = datasets_to_dataframe(relevant_datasets);
-
-        // Insert into HashMap
-        dataframes.insert(meta.internal_name.clone(), df);
     }
 
     dataframes
 }
 
-pub fn datasets_to_dataframe(datasets: Vec<&Dataset>) -> DataFrame {
+pub fn datasets_to_dataframe(datasets: &Vec<&Dataset>) -> DataFrame {
     // Create Series for each column
     let date_series = Series::new(
         "Date",

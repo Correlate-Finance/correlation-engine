@@ -10,7 +10,7 @@ dotenv = "0.15"
 serde = { version = "1.0.197", features = ["derive"] }
 chrono = { version = "0.4.35", features = ["serde"] }
 diesel = { version = "2.1.5", features = ["postgres", "chrono"] }
-polars = {version = "0.38.3", features = ["lazy", "dtype-duration", "dtype-datetime","temporal","strings", "ndarray"]}
+polars = {version = "0.38.3", features = ["lazy", "dtype-duration", "dtype-datetime", "temporal","strings", "ndarray", "performant", "chunked_ids"]}
 ndarray = "0.15.6"
 ndarray-stats = "0.5.1"
 rayon = "1.10.0"
@@ -22,3 +22,7 @@ futures = "0.3.30"
 
 [dev-dependencies]
 approx = "0.5.1"
+
+# Add jemallocator since its faster for allocation bottlenecked algorithms
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"
