@@ -32,14 +32,18 @@ pub async fn fetch_stock_revenues(
             }
 
             let reporting_date_month =
-                NaiveDate::parse_from_str(&report[0]["date"].as_str().unwrap(), "%Y-%m-%d")
+                NaiveDate::parse_from_str(report[0]["date"].as_str().unwrap(), "%Y-%m-%d")
                     .unwrap()
                     .month();
 
             let mut revenues = HashMap::new();
 
             for item in report {
-                let year = item["calendarYear"].as_str().unwrap().parse::<i32>().unwrap() ;
+                let year = item["calendarYear"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<i32>()
+                    .unwrap();
                 let date = format!("{}-01-01", year);
                 if year < start_year || year > end_year {
                     continue;
@@ -61,7 +65,7 @@ pub async fn fetch_stock_revenues(
 
             let period = report[0]["period"].as_str().unwrap();
             let reporting_date_month =
-                NaiveDate::parse_from_str(&report[0]["date"].as_str().unwrap(), "%Y-%m-%d")
+                NaiveDate::parse_from_str(report[0]["date"].as_str().unwrap(), "%Y-%m-%d")
                     .unwrap()
                     .month();
 

@@ -61,6 +61,15 @@ diesel::table! {
         high_level -> Bool,
         #[max_length = 255]
         source -> Nullable<Varchar>,
+        group_popularity -> Nullable<Int4>,
+        popularity -> Nullable<Int4>,
+        hidden -> Bool,
+        #[max_length = 255]
+        sub_source -> Nullable<Varchar>,
+        #[max_length = 255]
+        units -> Nullable<Varchar>,
+        #[max_length = 255]
+        units_short -> Nullable<Varchar>,
     }
 }
 

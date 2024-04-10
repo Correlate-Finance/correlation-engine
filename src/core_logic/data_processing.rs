@@ -47,25 +47,21 @@ pub fn transform_data(
     let lazy_df = df.clone().lazy().filter(col("Date").lt(lit(end_date)));
 
     let updated_df = match time_increment {
-        AggregationPeriod::Quarterly => {
-            let q_df = lazy_df
-                .with_column(
-                    (when(col("Date").dt().month().gt(fiscal_year_end))
-                        .then((col("Date").dt().year() + lit(1)).cast(DataType::String))
-                        .otherwise(col("Date").dt().year().cast(DataType::String))
-                        + lit("Q")
-                        + (((col("Date").dt().month() - lit(1) - lit(fiscal_year_end)) % lit(12))
-                            / lit(3)
-                            + lit(1))
-                        .cast(DataType::String))
-                    .alias("Date"),
-                )
-                .group_by(vec![col("Date")])
-                .agg(vec![col("Value").sum().alias("Value")])
-                .sort("Date", Default::default());
-
-            q_df
-        }
+        AggregationPeriod::Quarterly => lazy_df
+            .with_column(
+                (when(col("Date").dt().month().gt(fiscal_year_end))
+                    .then((col("Date").dt().year() + lit(1)).cast(DataType::String))
+                    .otherwise(col("Date").dt().year().cast(DataType::String))
+                    + lit("Q")
+                    + (((col("Date").dt().month() - lit(1) - lit(fiscal_year_end)) % lit(12))
+                        / lit(3)
+                        + lit(1))
+                    .cast(DataType::String))
+                .alias("Date"),
+            )
+            .group_by(vec![col("Date")])
+            .agg(vec![col("Value").sum().alias("Value")])
+            .sort("Date", Default::default()),
         AggregationPeriod::Annually => {
             // Implement Annually logic
             // ...
@@ -79,13 +75,13 @@ pub fn transform_data(
 }
 
 pub fn create_dataframes(
-    datasets: &Vec<Dataset>,
-    metadata: &Vec<DatasetMetadata>,
+    datasets: &[Dataset],
+    metadata: &[DatasetMetadata],
 ) -> HashMap<String, DataFrame> {
     let dataset_vectors: HashMap<i64, Vec<&Dataset>> =
         datasets.iter().fold(HashMap::new(), |mut acc, dataset| {
-            let metadata_id = dataset.metadata_id.clone();
-            let dataset_vector = acc.entry(metadata_id).or_insert(Vec::new());
+            let metadata_id = dataset.metadata_id;
+            let dataset_vector = acc.entry(metadata_id).or_default();
             dataset_vector.push(dataset);
             acc
         });
@@ -106,7 +102,7 @@ pub fn create_dataframes(
     dataframes
 }
 
-pub fn datasets_to_dataframe(datasets: &Vec<&Dataset>) -> DataFrame {
+pub fn datasets_to_dataframe(datasets: &[&Dataset]) -> DataFrame {
     // Create Series for each column
     let date_series = Series::new(
         "Date",
@@ -137,7 +133,7 @@ pub fn correlate(
 ) -> Vec<CorrelateDataPoint> {
     // Joining df1 and df2 on "key"
     let combined_df = dataset_df
-        .inner_join(&input_df, ["Date"], ["Date"])
+        .inner_join(input_df, ["Date"], ["Date"])
         .unwrap()
         .sort(["Date"], false, false)
         .unwrap();

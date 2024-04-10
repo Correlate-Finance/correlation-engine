@@ -92,7 +92,7 @@ async fn correlate_view(
 
         let transformed_dataframes: Arc<HashMap<String, DataFrame>> =
             Arc::new(pool.install(|| {
-                let transformed_dataframes = dataframes
+                dataframes
                     .par_iter()
                     .map(|(name, df)| {
                         let transformed_df = core_logic::data_processing::transform_data(
@@ -104,8 +104,7 @@ async fn correlate_view(
                         );
                         (name.clone(), transformed_df)
                     })
-                    .collect();
-                transformed_dataframes
+                    .collect()
             }));
 
         println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
@@ -119,8 +118,7 @@ async fn correlate_view(
                     _ => String::from(""),
                 };
                 let series_id = metadata.internal_name.clone();
-                let correlations = correlate(&revenues, df2, title, series_id, params.lag_periods);
-                correlations
+                correlate(&revenues, df2, title, series_id, params.lag_periods)
             })
             .flatten()
             .collect();
@@ -204,7 +202,7 @@ async fn main() {
                 // TODO: Use fiscal year end when we implement it
                 match result {
                     Ok(value) => Ok((value.0, value.1, params)),
-                    Err(_) => return Err(warp::reject::custom(InternalServerError)),
+                    Err(_) => Err(warp::reject::custom(InternalServerError)),
                 }
             },
         )
@@ -223,7 +221,7 @@ async fn main() {
                     aggregation_period: params.aggregation_period,
                     lag_periods: params.lag_periods,
                     correlation_metric: params.correlation_metric,
-                    fiscal_year_end: fiscal_year_end,
+                    fiscal_year_end,
                 };
                 correlate_view(shared1.clone(), revenue_df, correlate_params)
             },
