@@ -32,6 +32,8 @@ tikv-jemallocator = "0.5"
 name = "correlation-engine"
 path = "src/main.rs"
 
-[[bin]]
-name = "pairwise_correlations"
-path = "src/pairwise_correlations.rs"
+
+# Uncomment below to build pairwise_correlations
+# [[bin]]
+# name = "pairwise_correlations"
+# path = "src/pairwise_correlations.rs"

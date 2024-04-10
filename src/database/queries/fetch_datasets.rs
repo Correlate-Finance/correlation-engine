@@ -14,5 +14,7 @@ pub fn fetch_datasets() -> QueryResult<Vec<Dataset>> {
 pub fn fetch_dataset_metadata() -> QueryResult<Vec<DatasetMetadata>> {
     let conn = &mut establish_connection();
 
-    datasets_datasetmetadata.load::<DatasetMetadata>(conn)
+    datasets_datasetmetadata
+        .filter(hidden.eq(false))
+        .load::<DatasetMetadata>(conn)
 }
