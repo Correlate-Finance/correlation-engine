@@ -137,12 +137,13 @@ async fn correlate_view(
             .flatten()
             .collect();
 
-        correlations.sort_by(|a, b: &CorrelateDataPoint| {
+        // Sort descending by absolute value
+        correlations.sort_by(|a, b| {
             b.pearson_value
-                .partial_cmp(&a.pearson_value)
+                .abs()
+                .partial_cmp(&a.pearson_value.abs())
                 .unwrap_or(Ordering::Equal)
         });
-
         correlations.truncate(1000);
         correlations
     });
