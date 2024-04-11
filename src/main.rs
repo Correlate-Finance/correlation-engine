@@ -17,8 +17,8 @@ use adapters::discounting_cash_flows::fetch_stock_revenues;
 use adapters::discounting_cash_flows::InternalServerError;
 use api::lib::correlation_metric_from_str;
 use api::models::{
-    AggregationPeriod, CorrelateAutomaticRequestParameters, CorrelateDataPoint,
-    CorrelateRequestParameters, CorrelationData, ManualDataInput, RevenueRequestParameters,
+    AggregationPeriod, CorrelateAutomaticRequestParameters, CorrelateDataPoint, CorrelateInputBody,
+    CorrelateRequestParameters, CorrelationData, RevenueRequestParameters,
 };
 use core_logic::data_processing::{correlate, manual_input_to_dataframe, revenues_to_dataframe};
 use database::models::DatasetMetadata;
@@ -70,6 +70,7 @@ async fn correlate_view(
     >,
     revenues: DataFrame,
     params: CorrelateRequestParameters,
+    selected_datasets: Vec<String>,
 ) -> warp::reply::Json {
     let correlation_metric = correlation_metric_from_str(params.correlation_metric.clone());
     let (dataset_metadatas_map, dataframes) = pre_process_future.await;
@@ -77,7 +78,7 @@ async fn correlate_view(
     let dataset_metadatas_map = Arc::clone(&dataset_metadatas_map);
 
     let end_date: chrono::NaiveDate = match params.end_year {
-        Some(year) => chrono::NaiveDate::from_ymd_opt(year, 12, 1).unwrap(),
+        Some(year) => chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap(),
         None => chrono::offset::Utc::now().date_naive(),
     };
 
@@ -90,9 +91,22 @@ async fn correlate_view(
         // Fetch the revenues for the stock
         let now = SystemTime::now();
 
+        let filtered_dataframes: Arc<HashMap<String, DataFrame>> = if !selected_datasets.is_empty()
+        {
+            Arc::new(
+                dataframes
+                    .iter()
+                    .filter(|(name, _)| selected_datasets.contains(name))
+                    .map(|(name, df)| (name.clone(), df.clone()))
+                    .collect::<HashMap<_, _>>(),
+            )
+        } else {
+            dataframes
+        };
+
         let transformed_dataframes: Arc<HashMap<String, DataFrame>> =
             Arc::new(pool.install(|| {
-                dataframes
+                filtered_dataframes
                     .par_iter()
                     .map(|(name, df)| {
                         let transformed_df = core_logic::data_processing::transform_data(
@@ -223,7 +237,7 @@ async fn main() {
                     correlation_metric: params.correlation_metric,
                     fiscal_year_end,
                 };
-                correlate_view(shared1.clone(), revenue_df, correlate_params)
+                correlate_view(shared1.clone(), revenue_df, correlate_params, vec![])
             },
         );
 
@@ -232,12 +246,11 @@ async fn main() {
         .and(warp::body::json())
         .and(warp::query::<CorrelateRequestParameters>())
         .then(
-            move |manual_input_dataset: Vec<ManualDataInput>,
-                  params: CorrelateRequestParameters| {
+            move |body: CorrelateInputBody, params: CorrelateRequestParameters| {
                 // You can now use api_parameters in your handler
                 // ...
-                let df = manual_input_to_dataframe(manual_input_dataset);
-                correlate_view(shared2.clone(), df, params)
+                let df = manual_input_to_dataframe(body.manual_input_dataset);
+                correlate_view(shared2.clone(), df, params, body.selected_datasets)
             },
         );
 

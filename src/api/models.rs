@@ -63,3 +63,9 @@ pub struct ManualDataInput {
     pub date: String,
     pub value: f64,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CorrelateInputBody {
+    pub manual_input_dataset: Vec<ManualDataInput>,
+    pub selected_datasets: Vec<String>,
+}

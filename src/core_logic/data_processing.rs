@@ -44,7 +44,7 @@ pub fn transform_data(
         return df.clone();
     }
 
-    let lazy_df = df.clone().lazy().filter(col("Date").lt(lit(end_date)));
+    let lazy_df = df.clone().lazy().filter(col("Date").lt_eq(lit(end_date)));
 
     let updated_df = match time_increment {
         AggregationPeriod::Quarterly => lazy_df
