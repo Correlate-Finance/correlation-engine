@@ -143,6 +143,7 @@ async fn correlate_view(
                 .unwrap_or(Ordering::Equal)
         });
 
+        correlations.truncate(1000);
         correlations
     });
 
