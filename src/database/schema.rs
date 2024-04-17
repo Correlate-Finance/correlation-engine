@@ -70,6 +70,34 @@ diesel::table! {
         units -> Nullable<Varchar>,
         #[max_length = 255]
         units_short -> Nullable<Varchar>,
+        #[max_length = 255]
+        release -> Nullable<Varchar>,
+        #[max_length = 200]
+        url -> Nullable<Varchar>,
+        categories -> Nullable<Array<Nullable<Varchar>>>,
+    }
+}
+
+diesel::table! {
+    datasets_index (id) {
+        id -> Int4,
+        #[max_length = 255]
+        name -> Varchar,
+        #[max_length = 255]
+        aggregation_period -> Nullable<Varchar>,
+        #[max_length = 255]
+        correlation_metric -> Nullable<Varchar>,
+        created_at -> Timestamptz,
+        user_id -> Int8,
+    }
+}
+
+diesel::table! {
+    datasets_indexdataset (id) {
+        id -> Int4,
+        weight -> Float8,
+        dataset_id -> Int8,
+        index_id -> Int4,
     }
 }
 

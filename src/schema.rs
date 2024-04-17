@@ -70,6 +70,34 @@ diesel::table! {
         units -> Nullable<Varchar>,
         #[max_length = 255]
         units_short -> Nullable<Varchar>,
+        #[max_length = 255]
+        release -> Nullable<Varchar>,
+        #[max_length = 200]
+        url -> Nullable<Varchar>,
+        categories -> Nullable<Array<Varchar>>,
+    }
+}
+
+diesel::table! {
+    datasets_index (id) {
+        id -> Int4,
+        #[max_length = 255]
+        name -> Varchar,
+        #[max_length = 255]
+        aggregation_period -> Nullable<Varchar>,
+        #[max_length = 255]
+        correlation_metric -> Nullable<Varchar>,
+        created_at -> Timestamptz,
+        user_id -> Int8,
+    }
+}
+
+diesel::table! {
+    datasets_indexdataset (id) {
+        id -> Int4,
+        weight -> Float8,
+        dataset_id -> Int8,
+        index_id -> Int4,
     }
 }
 
@@ -143,6 +171,8 @@ diesel::table! {
         email -> Varchar,
         #[max_length = 255]
         password -> Varchar,
+        #[max_length = 6]
+        otp -> Nullable<Varchar>,
     }
 }
 
@@ -176,6 +206,9 @@ diesel::joinable!(auth_group_permissions -> auth_permission (permission_id));
 diesel::joinable!(auth_permission -> django_content_type (content_type_id));
 diesel::joinable!(authtoken_token -> users_user (user_id));
 diesel::joinable!(datasets_dataset -> datasets_datasetmetadata (metadata_id));
+diesel::joinable!(datasets_index -> users_user (user_id));
+diesel::joinable!(datasets_indexdataset -> datasets_datasetmetadata (dataset_id));
+diesel::joinable!(datasets_indexdataset -> datasets_index (index_id));
 diesel::joinable!(django_admin_log -> django_content_type (content_type_id));
 diesel::joinable!(django_admin_log -> users_user (user_id));
 diesel::joinable!(users_user_groups -> auth_group (group_id));
@@ -192,6 +225,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     authtoken_token,
     datasets_dataset,
     datasets_datasetmetadata,
+    datasets_index,
+    datasets_indexdataset,
     django_admin_log,
     django_content_type,
     django_migrations,

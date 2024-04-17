@@ -9,6 +9,10 @@ pub struct CorrelateDataPoint {
     pub input_data: Vec<f64>,
     pub dataset_data: Vec<f64>,
     pub dates: Vec<String>,
+    pub source: String,
+    pub units: String,
+    pub release: String,
+    pub url: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

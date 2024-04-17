@@ -127,12 +127,7 @@ async fn correlate_view(
             .par_iter()
             .map(|(name2, df2)| {
                 let metadata: &DatasetMetadata = dataset_metadatas_map.get(name2).unwrap();
-                let title = match &metadata.external_name {
-                    Some(title) => title.clone(),
-                    _ => String::from(""),
-                };
-                let series_id = metadata.internal_name.clone();
-                correlate(&revenues, df2, title, series_id, params.lag_periods)
+                correlate(&revenues, df2, params.lag_periods, metadata)
             })
             .flatten()
             .collect();

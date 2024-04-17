@@ -127,9 +127,8 @@ pub fn datasets_to_dataframe(datasets: &[&Dataset]) -> DataFrame {
 pub fn correlate(
     input_df: &DataFrame,
     dataset_df: &DataFrame,
-    title: String,
-    series_id: String,
     lag: usize,
+    metadata: &DatasetMetadata,
 ) -> Vec<CorrelateDataPoint> {
     // Joining df1 and df2 on "key"
     let combined_df = dataset_df
@@ -197,8 +196,27 @@ pub fn correlate(
         lag_start_vec.append(&mut input_data_shifted);
 
         correlate_data_points.push(CorrelateDataPoint {
-            title: title.clone(),
-            internal_name: series_id.clone(),
+            title: match &metadata.external_name {
+                Some(title) => title.clone(),
+                _ => metadata.internal_name.clone(),
+            },
+            internal_name: metadata.internal_name.clone(),
+            source: match &metadata.source {
+                Some(source) => source.clone(),
+                _ => String::from(""),
+            },
+            url: match &metadata.url {
+                Some(url) => url.clone(),
+                _ => String::from(""),
+            },
+            units: match &metadata.units {
+                Some(units) => units.clone(),
+                _ => String::from(""),
+            },
+            release: match &metadata.release {
+                Some(release) => release.clone(),
+                _ => String::from(""),
+            },
             pearson_value: pearson_correlation,
             lag: i,
             input_data: lag_start_vec,
@@ -281,17 +299,29 @@ mod tests {
             ),
             Series::new("Value", vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0]),
         ]);
-        let series_id = "test_series".to_string();
         let lag = 0;
-
+        let dataset_metadata = DatasetMetadata {
+            id: 1,
+            internal_name: "test_series".to_string(),
+            external_name: Some("title".to_string()),
+            description: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            category: None,
+            high_level: false,
+            source: None,
+            group_popularity: None,
+            popularity: None,
+            hidden: false,
+            sub_source: None,
+            units: None,
+            units_short: None,
+            release: None,
+            url: None,
+            categories: None,
+        };
         // Act
-        let results = correlate(
-            &df1.unwrap(),
-            &df2.unwrap(),
-            String::from("title"),
-            series_id,
-            lag,
-        );
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
         assert_eq!(results.len(), 0);
     }
 
@@ -330,17 +360,30 @@ mod tests {
             ),
             Series::new("Value", vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0]),
         ]);
-        let series_id = "test_series".to_string();
         let lag = 0;
 
+        let dataset_metadata = DatasetMetadata {
+            id: 1,
+            internal_name: "test_series".to_string(),
+            external_name: Some("title".to_string()),
+            description: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            category: None,
+            high_level: false,
+            source: None,
+            group_popularity: None,
+            popularity: None,
+            hidden: false,
+            sub_source: None,
+            units: None,
+            units_short: None,
+            release: None,
+            url: None,
+            categories: None,
+        };
         // Act
-        let results = correlate(
-            &df1.unwrap(),
-            &df2.unwrap(),
-            String::from("title"),
-            series_id,
-            lag,
-        );
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
         let result = &results[0];
 
         // Assert
@@ -411,17 +454,31 @@ mod tests {
                 vec![9.0, 11.0, 10.0, 9.0, 8.0, 7.0, 11.0, 13.0, 15.0],
             ),
         ]);
-        let series_id = "test_series".to_string();
         let lag = 1;
 
+        let dataset_metadata = DatasetMetadata {
+            id: 1,
+            internal_name: "test_series".to_string(),
+            external_name: Some("title".to_string()),
+            description: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            category: None,
+            high_level: false,
+            source: None,
+            group_popularity: None,
+            popularity: None,
+            hidden: false,
+            sub_source: None,
+            units: None,
+            units_short: None,
+            release: None,
+            url: None,
+            categories: None,
+        };
+
         // Act
-        let results = correlate(
-            &df1.unwrap(),
-            &df2.unwrap(),
-            String::from("title"),
-            series_id,
-            lag,
-        );
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
 
         assert_eq!(results.len(), 2);
         let result = &results[1];

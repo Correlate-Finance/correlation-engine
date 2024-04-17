@@ -65,7 +65,7 @@ fn run_correlations(
                 _ => String::from(""),
             };
             let series_id = metadata.internal_name.clone();
-            correlate(&input_df, df2, title, series_id, 0)
+            correlate(&input_df, df2, 0, metadata)
         })
         .flatten()
         .collect();

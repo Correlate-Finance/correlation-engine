@@ -20,6 +20,9 @@ pub struct DatasetMetadata {
     pub sub_source: Option<String>,    // Nullable<Varchar> corresponds to Option<String>
     pub units: Option<String>,         // Nullable<Varchar> corresponds to Option<String>
     pub units_short: Option<String>,   // Nullable<Varchar> corresponds to Option<String>
+    pub release: Option<String>,       // Nullable<Varchar> corresponds to Option<String>
+    pub url: Option<String>,           // Nullable<Varchar> corresponds to Option<String>
+    pub categories: Option<Vec<Option<String>>>, // Nullable<Array<Nullable<Varchar>>> corresponds to Option<Vec<Option<String>>>
 }
 
 #[derive(Queryable, Selectable, Deserialize, Serialize, Debug, Clone)]
