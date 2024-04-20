@@ -222,6 +222,14 @@ pub fn correlate(
             input_data: lag_start_vec,
             dataset_data: dataset_data_shifted,
             dates: dates.clone(),
+            categories: match &metadata.categories {
+                Some(categories) => categories
+                    .iter()
+                    .filter_map(|c| c.as_ref())
+                    .cloned()
+                    .collect(),
+                _ => Vec::new(),
+            },
         });
     }
 

@@ -13,6 +13,7 @@ pub struct CorrelateDataPoint {
     pub units: String,
     pub release: String,
     pub url: String,
+    pub categories: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

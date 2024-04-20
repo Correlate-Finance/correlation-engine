@@ -139,7 +139,7 @@ async fn correlate_view(
                 .partial_cmp(&a.pearson_value.abs())
                 .unwrap_or(Ordering::Equal)
         });
-        correlations.truncate(1000);
+        // correlations.truncate(1000);
         correlations
     });
 
