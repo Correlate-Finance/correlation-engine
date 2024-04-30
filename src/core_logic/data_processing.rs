@@ -3,7 +3,7 @@ use crate::api::models::{
 };
 use chrono::NaiveDate;
 use ndarray_stats::CorrelationExt;
-use polars::prelude::*;
+use polars::{lazy::dsl::col, prelude::*};
 use std::collections::HashMap;
 
 use crate::database::models::{Dataset, DatasetMetadata};
@@ -60,13 +60,20 @@ pub fn transform_data(
                 .alias("Date"),
             )
             .group_by(vec![col("Date")])
+            .agg(vec![
+                col("Value").sum().alias("Value"),
+                col("Value").count().alias("Count"),
+            ])
+            // Remove any periods with less than 3 data points
+            .filter(col("Count").gt_eq(lit(3)))
+            // Remove the Count column
+            .select(&[col("Date"), col("Value")])
+            .sort("Date", Default::default()),
+        AggregationPeriod::Annually => lazy_df
+            .with_column(col("Date").dt().year().cast(DataType::String).alias("Date"))
+            .group_by(vec![col("Date")])
             .agg(vec![col("Value").sum().alias("Value")])
             .sort("Date", Default::default()),
-        AggregationPeriod::Annually => {
-            // Implement Annually logic
-            // ...
-            lazy_df
-        }
     }
     .collect()
     .unwrap();
@@ -532,9 +539,10 @@ mod tests {
                     NaiveDate::from_ymd_opt(2020, 3, 1),
                     NaiveDate::from_ymd_opt(2020, 4, 1),
                     NaiveDate::from_ymd_opt(2020, 5, 1),
+                    NaiveDate::from_ymd_opt(2020, 6, 1),
                 ],
             ),
-            Series::new("Value", &[10, 20, 30, 40, 50]),
+            Series::new("Value", &[10, 20, 30, 40, 50, 60]),
         ])
         .unwrap();
 
@@ -550,7 +558,44 @@ mod tests {
         // Define the expected output DataFrame
         let expected = DataFrame::new(vec![
             Series::new("Date", &["2020Q1", "2020Q2"]),
-            Series::new("Value", &[60, 90]),
+            Series::new("Value", &[60, 150]),
+        ])
+        .unwrap();
+
+        // Assert that the result matches the expected output
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_transform_data_missing_point_in_quarter() {
+        // Create a sample DataFrame
+        let df = DataFrame::new(vec![
+            Series::new(
+                "Date",
+                vec![
+                    NaiveDate::from_ymd_opt(2020, 1, 1),
+                    NaiveDate::from_ymd_opt(2020, 2, 1),
+                    NaiveDate::from_ymd_opt(2020, 3, 1),
+                    NaiveDate::from_ymd_opt(2020, 4, 1),
+                    NaiveDate::from_ymd_opt(2020, 5, 1),
+                ],
+            ),
+            Series::new("Value", &[10, 20, 30, 40, 50]),
+        ])
+        .unwrap();
+
+        // Call the transform_data function
+        let result = transform_data(
+            &df,
+            AggregationPeriod::Quarterly,
+            12,
+            CorrelationMetric::RawValue,
+            chrono::offset::Utc::now().date_naive(),
+        );
+
+        let expected = DataFrame::new(vec![
+            Series::new("Date", &["2020Q1"]),
+            Series::new("Value", &[60]),
         ])
         .unwrap();
 
