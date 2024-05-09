@@ -136,6 +136,7 @@ pub fn correlate(
     dataset_df: &DataFrame,
     lag: usize,
     metadata: &DatasetMetadata,
+    include_data: bool,
 ) -> Vec<CorrelateDataPoint> {
     // Joining df1 and df2 on "key"
     let combined_df = dataset_df
@@ -198,9 +199,15 @@ pub fn correlate(
         let mut lag_padding_vec = vec![0.0; i];
         let mut lag_start_vec = vec![0.0; i];
 
-        // Append zeroes to the end of input_data and start of dataset_data to graph them correctly
-        dataset_data_shifted.append(&mut lag_padding_vec);
-        lag_start_vec.append(&mut input_data_shifted);
+        if include_data {
+            // Append zeroes to the end of input_data and start of dataset_data to graph them correctly
+            dataset_data_shifted.append(&mut lag_padding_vec);
+            lag_start_vec.append(&mut input_data_shifted);
+        } else {
+            // Reset to empty vectors if we don't want to include data
+            lag_start_vec = vec![];
+            dataset_data_shifted = vec![];
+        }
 
         correlate_data_points.push(CorrelateDataPoint {
             title: match &metadata.external_name {
@@ -336,7 +343,7 @@ mod tests {
             categories: None,
         };
         // Act
-        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata, true);
         assert_eq!(results.len(), 0);
     }
 
@@ -398,7 +405,7 @@ mod tests {
             categories: None,
         };
         // Act
-        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata, true);
         let result = &results[0];
 
         // Assert
@@ -493,7 +500,7 @@ mod tests {
         };
 
         // Act
-        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata);
+        let results = correlate(&df1.unwrap(), &df2.unwrap(), lag, &dataset_metadata, true);
 
         assert_eq!(results.len(), 2);
         let result = &results[1];

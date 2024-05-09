@@ -122,12 +122,12 @@ async fn correlate_view(
             }));
 
         println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
-
+        let include_data = params.include_data.unwrap_or(false);
         let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
             .par_iter()
             .map(|(name2, df2)| {
                 let metadata: &DatasetMetadata = dataset_metadatas_map.get(name2).unwrap();
-                correlate(&revenues, df2, params.lag_periods, metadata)
+                correlate(&revenues, df2, params.lag_periods, metadata, include_data)
             })
             .flatten()
             .collect();
@@ -139,8 +139,10 @@ async fn correlate_view(
                 .partial_cmp(&a.pearson_value.abs())
                 .unwrap_or(Ordering::Equal)
         });
-        // correlations.truncate(1000);
-        correlations
+        if let Some(limit) = params.limit {
+            correlations.truncate(limit as usize);
+        }
+        return correlations;
     });
 
     warp::reply::json(&CorrelationData {
@@ -232,6 +234,8 @@ async fn main() {
                     lag_periods: params.lag_periods,
                     correlation_metric: params.correlation_metric,
                     fiscal_year_end,
+                    limit: params.limit,
+                    include_data: params.include_data,
                 };
                 correlate_view(shared1.clone(), revenue_df, correlate_params, vec![])
             },

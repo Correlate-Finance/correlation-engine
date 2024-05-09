@@ -6,6 +6,6 @@ pub fn correlation_metric_from_str(metric: String) -> CorrelationMetric {
     } else if metric == "YOY_GROWTH" {
         CorrelationMetric::YoyGrowth
     } else {
-        panic!("Unknown Metric")
+        panic!("Unknown Metric {}", metric)
     }
 }

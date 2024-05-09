@@ -43,6 +43,8 @@ pub struct CorrelateAutomaticRequestParameters {
     pub aggregation_period: String,
     pub lag_periods: usize,
     pub correlation_metric: String,
+    pub limit: Option<i32>,
+    pub include_data: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -53,6 +55,8 @@ pub struct CorrelateRequestParameters {
     pub lag_periods: usize,
     pub correlation_metric: String,
     pub fiscal_year_end: Option<u32>,
+    pub limit: Option<i32>,
+    pub include_data: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
