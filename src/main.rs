@@ -122,7 +122,7 @@ async fn correlate_view(
             }));
 
         println! {"Elapsed time {}", now.elapsed().unwrap().as_secs()}
-        let include_data = params.include_data.unwrap_or(false);
+        let include_data = params.include_data.unwrap_or(true);
         let mut correlations: Vec<CorrelateDataPoint> = transformed_dataframes
             .par_iter()
             .map(|(name2, df2)| {
